@@ -221,6 +221,33 @@ docker run --rm -i \
 4. Note the **Tenant ID**, **Client ID** (and **Client Secret** / **cert** if
    using those modes).
 
+**Automated (Azure CLI)** — the same registration can be created from your
+`az` identity with one command (Bicep/ARM cannot register Entra apps; they live
+in Microsoft Graph, not Azure Resource Manager):
+
+```bash
+az ad app create --display-name msgraph-mcp-local \
+  --sign-in-audience AzureADMyOrg \
+  --public-client-redirect-uris "http://localhost" \
+  --is-fallback-public-client true
+```
+
+`scripts/setup_entra_app.ps1` wraps this for the common cases — it reuses an
+app if it already exists, prints the **Client ID / Tenant ID**, optionally
+persists `MSGRAPH_CLIENT_ID` / `MSGRAPH_TENANT_ID` (`setx`), dumps the IDs to a
+JSON file for other tooling, and can tear the registration back down:
+
+```powershell
+.\scripts\setup_entra_app.ps1                              # create + print IDs
+.\scripts\setup_entra_app.ps1 -SetEnv                      # + persist env vars
+.\scripts\setup_entra_app.ps1 -OutFile C:\temp\g.json      # + write IDs for pipeline
+.\scripts\setup_entra_app.ps1 -Delete -AppId <clientId>    # remove registration
+```
+
+The equivalent automation paths are the Microsoft Graph API (e.g. via
+`az rest --method POST --uri https://graph.microsoft.com/v1.0/applications`)
+or the Entra (`azuread`) Terraform provider, if you need full IaC.
+
 ### 3. Authenticate
 
 Configuration is entirely via environment variables.
@@ -366,6 +393,7 @@ After editing client config, **restart the client** so the MCP server is loaded.
 | `MSGRAPH_BASE_URL` | *(from cloud)* | Override Graph base URL |
 | `MSGRAPH_API_VERSION` | `v1.0` | `v1.0` or `beta` |
 | `MSGRAPH_ACCESS_TOKEN` | *(empty)* | Pre-acquired token (pre_token) |
+| `MSGRAPH_HTTP_TIMEOUT` | `60` | Seconds a tool call waits for the Graph response; raise for interactive/`device_code` sign-in, which waits for you in the browser |
 | `MSGRAPH_TOKEN_CACHE_PATH` | `~/.msgraph-mcp/token_cache.json` | Token cache location |
 | `MSGRAPH_READ_ONLY` | `false` | `true` disables every write tool |
 | `MSGRAPH_MAX_PAGES` | `50` | Max pages auto-paginated per collection |
