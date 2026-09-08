@@ -92,20 +92,11 @@ def upload_file(parent_id: str, name: str, content_base64: str, content_type: st
     def go():
         require_write()
         raw = base64.b64decode(content_base64)
-        # For small files, use simple upload
-        import httpx
-
-        from ..auth import AuthManager
-        auth = AuthManager()
-        token = auth.acquire_token()
-        url = f"{auth.base_url}/v1.0/me/drive/items/{parent_id}:/{name}:/content"
-        resp = httpx.put(url, content=raw, headers={
-            "Authorization": f"Bearer {token}",
-            "Content-Type": content_type,
-        })
-        if resp.status_code in (200, 201):
-            return resp.json()
-        return fail(f"Upload failed: {resp.status_code} {resp.text}")
+        return run_sync(graph().put(
+            f"/me/drive/items/{parent_id}:/{name}:/content",
+            content=raw,
+            headers={"Content-Type": content_type},
+        ))
     return go()
 
 

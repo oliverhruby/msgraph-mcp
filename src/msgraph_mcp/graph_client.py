@@ -51,6 +51,7 @@ class GraphClient:
         path: str,
         *,
         json: Any = None,
+        content: Any = None,
         params: dict | None = None,
         headers: dict | None = None,
         beta: bool = False,
@@ -64,15 +65,20 @@ class GraphClient:
         last_error = None
         for attempt in range(4):
             try:
-                resp = await self._http.request(
-                    method, url, json=json, params=params, headers=hdrs,
-                )
+                if content is not None:
+                    resp = await self._http.request(
+                        method, url, content=content, params=params, headers=hdrs,
+                    )
+                else:
+                    resp = await self._http.request(
+                        method, url, json=json, params=params, headers=hdrs,
+                    )
             except httpx.TransportError as e:
                 last_error = e
                 time.sleep(2 ** attempt)
                 continue
 
-            if resp.status_code == 200:
+            if resp.status_code in (200, 201, 202, 204):
                 return resp.json() if resp.content else {}
 
             if resp.status_code in (429, 503, 504):
@@ -103,8 +109,8 @@ class GraphClient:
     async def delete(self, path: str, *, params: dict | None = None, beta: bool = False) -> Any:
         return await self.request("DELETE", path, params=params, beta=beta)
 
-    async def put(self, path: str, *, json: Any = None, params: dict | None = None, beta: bool = False) -> Any:
-        return await self.request("PUT", path, json=json, params=params, beta=beta)
+    async def put(self, path: str, *, json: Any = None, content: Any = None, params: dict | None = None, headers: dict | None = None, beta: bool = False) -> Any:
+        return await self.request("PUT", path, json=json, content=content, params=params, headers=headers, beta=beta)
 
     # ------------------------------------------------------------------
     # Pagination
