@@ -1,0 +1,98 @@
+name: Graph Coverage Drift
+
+# Verifies that the registered tool surface covers the official Microsoft
+# Graph OpenAPI spec. On scheduled runs, also detects newly added Graph
+# endpoints and files an issue for each uncovered operation.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 8 * * 1"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  coverage-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install package + coverage deps
+        run: python -m pip install --upgrade pip && python -m pip install . && python -m pip install pyyaml
+
+      - name: Check Graph OpenAPI coverage drift
+        run: python scripts/check_graph_api_coverage.py
+
+  new-endpoint-canary:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install package + coverage deps
+        run: python -m pip install --upgrade pip && python -m pip install . && python -m pip install pyyaml
+
+      - name: Detect uncovered endpoints from latest spec
+        id: scan
+        continue-on-error: true
+        run: python scripts/check_graph_api_coverage.py 2>&1 | tee /tmp/coverage_out.txt || true
+
+      - name: Extract uncovered endpoints
+        id: extract
+        run: |
+          python - <<'PY'
+          import pathlib, re
+          text = pathlib.Path('/tmp/coverage_out.txt').read_text(encoding='utf-8')
+          lines = [l for l in text.splitlines() if re.match(r'^\s+(GET|POST|PATCH|PUT|DELETE) ', l)]
+          if not lines:
+              print("uncovered=none")
+          else:
+              # dedupe and keep
+              uniq = list(dict.fromkeys(l.strip() for l in lines))
+              print(f"uncovered_count={len(uniq)}")
+          PY
+
+      - name: File issue for uncovered endpoints
+        if: steps.extract.outputs.uncovered_count
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const out = require('child_process').execSync('cat /tmp/coverage_out.txt').toString();
+            const lines = out.split('\n').filter(l => /^\s+(GET|POST|PATCH|PUT|DELETE) /.test(l)).map(l=>l.trim());
+            const uniq = [...new Set(lines)];
+            if (uniq.length === 0) {
+              console.log('All covered; no issue needed.');
+              return;
+            }
+            const body = [
+              'Microsoft Graph introduced new endpoints not yet wrapped by mcpGraph. These may be new APIs released after the last review.',
+              '',
+              '## Uncovered operations',
+              '',
+              '```',
+              ...uniq.slice(0, 500),
+              '```',
+              '',
+              'Add a tool in `src/msgraph_mcp/tools/` or add an entry with a reason to',
+              '`scripts/graph_api_ignored_endpoints.json`.',
+            ].join('\n');
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `New Microsoft Graph endpoints detected: ${uniq.length} uncovered`,
+              body: body,
+              labels: ['coverage-gap', 'graph', 'automation'],
+            });

@@ -1,0 +1,62 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "msgraph-mcp"
+version = "0.1.0"
+description = "Full-coverage Microsoft Graph MCP server — 200+ tools across mail, calendar, files, Teams, SharePoint, Planner, OneNote, Excel, admin, and more."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Oliver Hruby" }]
+requires-python = ">=3.10"
+keywords = [
+    "mcp", "microsoft-graph", "microsoft-365", "entra-id", "outlook",
+    "onedrive", "sharepoint", "teams", "planner", "onenote", "excel",
+    "ai", "agent", "llm",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Internet",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "mcp<2",
+    "msal>=1.28",
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff",
+    "pip-audit",
+    "pyyaml",
+    "pytest",
+]
+
+[project.urls]
+Homepage = "https://github.com/oliverhruby/msgraph-mcp"
+Repository = "https://github.com/oliverhruby/msgraph-mcp"
+Issues = "https://github.com/oliverhruby/msgraph-mcp/issues"
+
+[project.scripts]
+msgraph-mcp = "msgraph_mcp:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+target-version = "py310"
+# Decorators carry method + Graph endpoint + delegated/application scope lists, so
+# registration lines legitimately run long. Kept generous; logic wrapped elsewhere.
+line-length = 200
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]

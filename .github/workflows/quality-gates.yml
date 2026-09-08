@@ -1,0 +1,88 @@
+name: Quality Gates
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  python-sanity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Compile all modules
+        run: |
+          python -m py_compile src/msgraph_mcp/__init__.py
+          python -m py_compile src/msgraph_mcp/auth.py
+          python -m py_compile src/msgraph_mcp/graph_client.py
+          python -m py_compile src/msgraph_mcp/models.py
+          python -m py_compile src/msgraph_mcp/coverage.py
+          python -m py_compile scripts/check_graph_api_coverage.py
+
+      - name: Install package from source
+        run: python -m pip install --upgrade pip && python -m pip install .
+
+      - name: Verify tool registry loads and count
+        run: |
+          python - <<'PY'
+          import sys
+          sys.path.insert(0, "src")
+          from msgraph_mcp import coverage
+          count = coverage.tool_count()
+          print(f"Registered tools: {count}")
+          if count < 150:
+              raise SystemExit(f"Expected >=150 registered tools, got {count}")
+          by = coverage.by_workload()
+          print(f"Workloads: {len(by)}")
+          for w, tools in sorted(by.items()):
+              print(f"  {w}: {len(tools)} tools")
+          PY
+
+  docker-mcp-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install MCP client dependency
+        run: python -m pip install --upgrade pip && python -m pip install "mcp<2"
+
+      - name: Build Docker image
+        run: docker build -t msgraph-mcp:ci .
+
+      - name: MCP stdio handshake + tools list
+        run: |
+          python - <<'PY'
+          import asyncio
+          from mcp import ClientSession, StdioServerParameters
+          from mcp.client.stdio import stdio_client
+
+          async def main():
+              params = StdioServerParameters(
+                  command="docker",
+                  args=["run", "--rm", "-i", "msgraph-mcp:ci"],
+                  env={},
+              )
+              async with stdio_client(params) as (read_stream, write_stream):
+                  async with ClientSession(read_stream, write_stream) as session:
+                      await session.initialize()
+                      tools = await session.list_tools()
+                      items = getattr(tools, "tools", []) or []
+                      if len(items) < 150:
+                          raise SystemExit(f"Expected >=150 tools, got {len(items)}")
+                      print(f"MCP smoke OK, tools={len(items)}")
+
+          asyncio.run(main())
+          PY

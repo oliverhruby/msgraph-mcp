@@ -1,0 +1,70 @@
+{
+  "DELETE /users/{id}": {
+    "reason": "Destructive directory write; deliberately out of scope for an AI assistant",
+    "out_of_scope": true
+  },
+  "POST /users/{id}/authentication/methods/{id}/resetPassword": {
+    "reason": "Security-sensitive password reset; requires privileged admin, not suitable for AI agent",
+    "out_of_scope": true
+  },
+  "POST /groups/{id}/owners/$ref": {
+    "reason": "Group owner management is an IAM operation; members covered, owners deferred",
+    "review_after": "2026-12-01"
+  },
+  "DELETE /groups/{id}/owners/{id}/$ref": {
+    "reason": "Group owner management is an IAM operation; members covered, owners deferred",
+    "review_after": "2026-12-01"
+  },
+  "POST /groups": {
+    "reason": "Security group creation requires sensitive IAM consent; create limited to self-service scenarios",
+    "review_after": "2026-12-01"
+  },
+  "DELETE /me/drive/items/{id}/content": {
+    "reason": "Redundant with DELETE of the item itself",
+    "out_of_scope": true
+  },
+  "POST /me/drive/items/{id}/checkin": {
+    "reason": "Rarely used legacy flow; checkout/checkin for document libraries deferred",
+    "review_after": "2026-12-01"
+  },
+  "POST /me/drive/items/{id}/checkout": {
+    "reason": "Rarely used legacy flow; checkout/checkin for document libraries deferred",
+    "review_after": "2026-12-01"
+  },
+  "POST /me/drive/items/{id}/restore": {
+    "reason": "Recycle bin restore is destructive-adjacent; deferred pending audit of safety matrix",
+    "review_after": "2026-12-01"
+  },
+  "POST /communications/callRecords": {
+    "reason": "Application-only permission required; out of delegated scope by design",
+    "out_of_scope": true
+  },
+  "GET /communications/callRecords/{id}": {
+    "reason": "Application-only permission required; out of delegated scope by design",
+    "out_of_scope": true
+  },
+  "POST /servicePrincipals": {
+    "reason": "Service principal creation is high-privilege directory write; deferred",
+    "out_of_scope": true
+  },
+  "DELETE /servicePrincipals/{id}": {
+    "reason": "Service principal deletion is high-privilege directory write; deferred",
+    "out_of_scope": true
+  },
+  "POST /applications": {
+    "reason": "Application registration is high-privilege directory write; deferred",
+    "out_of_scope": true
+  },
+  "DELETE /applications/{id}": {
+    "reason": "Application deletion is high-privilege directory write; deferred",
+    "out_of_scope": true
+  },
+  "POST /me/sendMail": {
+    "note": "Covered by send_mail tool",
+    "covered_by": "send_mail"
+  },
+  "POST /me/messages/{id}/forward": {
+    "note": "Covered by forward_message tool",
+    "covered_by": "forward_message"
+  }
+}
