@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from typing import Any
 
 from .. import (
@@ -59,7 +60,8 @@ def run_sync(coro):
         import concurrent.futures
         with concurrent.futures.ThreadPoolExecutor() as pool:
             future = pool.submit(asyncio.run, coro)
-            return future.result(timeout=60)
+            timeout = int(os.getenv("MSGRAPH_HTTP_TIMEOUT", "60"))
+            return future.result(timeout=timeout)
     else:
         return asyncio.run(coro)
 

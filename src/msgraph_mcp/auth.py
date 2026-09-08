@@ -61,6 +61,12 @@ DEFAULT_DELEGATED_SCOPES = [
 ]
 
 
+def _normalize_auth_mode(mode: str) -> str:
+    """Accept the README's underscore spelling and code's hyphen spelling alike."""
+    canonical = mode.strip().replace("_", "-").lower()
+    return "managed-identity" if canonical == "managed-identity-user" else canonical
+
+
 class AuthManager:
     """Manages MSAL token acquisition and caching for Microsoft Graph."""
 
@@ -70,7 +76,9 @@ class AuthManager:
         self.client_secret = os.getenv("MSGRAPH_CLIENT_SECRET", "")
         self.cert_path = os.getenv("MSGRAPH_CERT_PATH", "")
         self.cert_password = os.getenv("MSGRAPH_CERT_PASSWORD", "")
-        self.auth_mode = os.getenv("MSGRAPH_AUTH_MODE", "interactive")
+        # README documents underscore values (device_code, client_secret, ...) but the
+        # dispatch/app-type logic uses hyphens. Normalize so both spellings work.
+        self.auth_mode = _normalize_auth_mode(os.getenv("MSGRAPH_AUTH_MODE", "interactive"))
         self.cloud = os.getenv("MSGRAPH_CLOUD", "global")
         self.pre_token = os.getenv("MSGRAPH_ACCESS_TOKEN", "")
         self.token_cache_path = os.getenv(
@@ -241,6 +249,7 @@ class AuthManager:
             "certificate": self.acquire_token_by_certificate,
             "obo": self.acquire_token_on_behalf_of,
             "managed-identity": self.acquire_token_managed_identity,
+            "pre-token": lambda: self.pre_token,
             "token": lambda: self.pre_token,
         }
 

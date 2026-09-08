@@ -27,6 +27,27 @@ def test_cloud_maps_cover_all_sovereigns():
     assert AUTHORITY_URLS["global"] == "https://login.microsoftonline.com"
 
 
+def test_auth_mode_accepts_documented_underscore_values(monkeypatch, tmp_path):
+    """README documents device_code/client_secret/... ; the code dispatches on hyphens."""
+    import msgraph_mcp.auth as auth_mod
+
+    cases = {
+        "device_code": "device-code",
+        "client_secret": "client-secret",
+        "certificate": "certificate",
+        "managed_identity": "managed-identity",
+        "managed_identity_user": "managed-identity",
+        "pre_token": "pre-token",
+        "interactive": "interactive",
+        "device-code": "device-code",
+    }
+    assert auth_mod._normalize_auth_mode("DEVICE_CODE") == "device-code"
+    for raw, expected in cases.items():
+        assert auth_mod._normalize_auth_mode(raw) == expected
+        monkeypatch.setenv("MSGRAPH_AUTH_MODE", raw)
+        assert AuthManager().auth_mode == expected
+
+
 def test_default_delegated_scopes_marked_core():
     for scope in ("User.Read", "Mail.Read", "Mail.Send", "Calendars.ReadWrite",
                   "Files.ReadWrite", "Tasks.ReadWrite", "Directory.Read.All"):
