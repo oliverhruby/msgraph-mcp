@@ -1,87 +1,237 @@
-# msgraph-mcp
+# Microsoft Graph MCP Server
 
-A self-hosted **Model Context Protocol (MCP)** server that exposes the
-**Microsoft Graph API** as **200+ MCP tools**, covering mail, calendar, files,
+[![GitHub release](https://img.shields.io/github/v/release/oliverhruby/msgraph-mcp.svg?label=release)](https://github.com/oliverhruby/msgraph-mcp/releases)
+[![Quality gates](https://img.shields.io/github/actions/workflow/status/oliverhruby/msgraph-mcp/quality-gates.yml.svg?label=quality%20gates)](https://github.com/oliverhruby/msgraph-mcp/actions/workflows/quality-gates.yml)
+[![Security](https://img.shields.io/github/actions/workflow/status/oliverhruby/msgraph-mcp/security.yml.svg?label=security)](https://github.com/oliverhruby/msgraph-mcp/actions/workflows/security.yml)
+[![Container security](https://img.shields.io/github/actions/workflow/status/oliverhruby/msgraph-mcp/container-security.yml.svg?label=container%20security)](https://github.com/oliverhruby/msgraph-mcp/actions/workflows/container-security.yml)
+[![Coverage drift](https://img.shields.io/github/actions/workflow/status/oliverhruby/msgraph-mcp/upstream-coverage.yml.svg?label=coverage%20drift)](https://github.com/oliverhruby/msgraph-mcp/actions/workflows/upstream-coverage.yml)
+
+## Project
+
+A **Model Context Protocol (MCP) server** that exposes the full
+**Microsoft Graph API** to AI agents such as opencode, Claude, Cursor and any
+other MCP client — **219 tools** across 25 workloads: mail, calendar, files,
 Teams, SharePoint, Planner, To Do, OneNote, Excel, presence, search, identity
-governance, security, reports, and more.
+governance, security, reports, audit logs and more.
 
-Unlike the [official Microsoft MCP Server for Enterprise], which is a hosted,
-read-only Entra-directory service with three tools, `msgraph-mcp` is a
-bring-your-own-credentials, full-coverage Graph client you run yourself.
+Microsoft Graph is the single REST entry point into Microsoft 365. This server
+lets an agent authenticate to your tenant **once** and then operate your real
+mail, files, calendar, Teams and SharePoint data directly — reading inboxes,
+drafting and sending mail, creating calendar events and meetings, uploading or
+sharing files, answering Teams channels, maintaining Planner/To Do tasks, and
+administering users, groups, security and audit logs.
 
-[official Microsoft MCP Server for Enterprise]: https://learn.microsoft.com/graph/mcp-server-overview
-
----
-
-## Highlights
-
-- **219 tools** across 25 workloads (see [Tool reference](#tool-reference)).
-- **No `azure-identity`, no `msgraph-sdk`** — a thin raw-HTTP client (`httpx`)
-  + `msal`. Fewer dependencies, smaller attack surface.
-- **Six auth modes**: interactive, device-code, client-secret, certificate,
-  on-behalf-of, managed identity — plus pre-existing-token.
-- **Sovereign cloud support** (US Gov L4/L5, China, Germany).
-- **Read-only mode** with a hard guard: set `MSGRAPH_READ_ONLY=true` to forbid
-  every write tool via `require_write()`.
-- Retries on `429`/`503`/`504`, automatic pagination, `$batch`, and delta queries.
-- Runs over **stdio** or **HTTP/SSE**, in-process or as a **Docker** container.
-- CI/CD: quality gates, security/pip-audit, Trivy container scan, coverage
-  drift vs the official Graph OpenAPI spec, PyPI + GHCR publishing.
+> **Self-hosted & by-design full-coverage.** Unlike the hosted Microsoft-hosted
+> "MCP Server for Enterprise", this server runs on **your** machine or
+> container, uses **your own** credentials (interactive, device-code,
+> client-secret, certificate, on-behalf-of, managed identity), and can **write**
+> — with a hard read-only guard when you want it safe.
 
 ---
 
-## Install
+## Table of Contents
+
+- [Why another Microsoft Graph MCP server?](#why-another-microsoft-graph-mcp-server)
+- [What it provides](#what-it-provides)
+- [Getting started](#getting-started)
+  - [Prerequisites](#prerequisites)
+  - [1. Install](#1-install)
+  - [2. Register an app in Microsoft Entra ID](#2-register-an-app-in-microsoft-entra-id)
+  - [3. Authenticate](#3-authenticate)
+  - [4. Register with your MCP client](#4-register-with-your-mcp-client)
+- [Prompt examples](#prompt-examples)
+- [Configuration](#configuration)
+- [Tool reference](#tool-reference)
+- [Data & safety notes](#data--safety-notes)
+- [Contributing](#contributing)
+- [Limitations](#limitations)
+- [Support](#support)
+- [License](#license)
+
+---
+
+## Why another Microsoft Graph MCP server?
+
+Several Microsoft Graph / Microsoft 365 MCP servers already exist. I have **no
+affiliation** with any of them — they are referenced honestly for comparison,
+exactly as with this project's siblings.
+
+### The main players
+
+- **[Official — Microsoft MCP Server for Enterprise]** — hosted by Microsoft,
+  *read-only Entra directory* only. It does not expose one tool per Graph operation;
+  instead it uses RAG to *generate Queries* on the fly (`microsoft_graph_suggest_queries`,
+  `microsoft_graph_get`, `microsoft_graph_list_properties`). Global cloud only,
+  write support still in preview, no self-hosting.
+- **[Softeria/ms-365-mcp-server]** — Node.js, the closest "full coverage"
+  alternative: 300+ tools, 1:1 endpoint mapping, MSAL, read-only mode, tool
+  presets + dynamic discovery. Worth evaluating.
+- **[DustHoff/msgraphmcp]** — Node.js/TypeScript, 140+ tools, four auth modes,
+  notably deep **Intune** coverage (~64 Intune tools).
+- **[nitin27may/ms-graph-mcp]** — Python, 85 tools, no SDK / no `azure-identity`
+  (raw `httpx`), namespaced tools, read/write separation behind a write scope.
+- **[CodyBuilder-dev/ms-graph-mcp]** — Node.js, device-code auth, mail/calendar/
+  Teams/To Do/contacts/files/OneDrive/SharePoint, but **no directory** surface.
+- **[timfurlong/msgraph-mcp]** — Python, on PyPI, mail + calendar + read-only
+  Teams, MSAL device code only, uses the Graph SDK.
+
+[Official — Microsoft MCP Server for Enterprise]: https://learn.microsoft.com/graph/mcp-server/overview
+[Softeria/ms-365-mcp-server]: https://github.com/softeria/ms-365-mcp-server
+[DustHoff/msgraphmcp]: https://github.com/DustHoff/msgraphmcp
+[nitin27may/ms-graph-mcp]: https://github.com/nitin27may/ms-graph-mcp
+[CodyBuilder-dev/ms-graph-mcp]: https://github.com/CodyBuilder-dev/ms-graph-mcp
+[timfurlong/msgraph-mcp]: https://github.com/timfurlong/msgraph-mcp
+
+### What sets this project apart
+
+| Capability | Microsoft official | Softeria | DustHoff | nitin27may | CodyBuilder | timfurlong | **this project** |
+|---|---|---|---|---|---|---|---|
+| Language / runtime | hosted | Node.js | Node.js | Python | Node.js | Python | **Python** |
+| Tools | 3 | 300+ | 140+ | 85 | ~50 | ~45 | **219** |
+| Read-only Entra directory | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ✅ |
+| Mail (send/reply/rules/archive) | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Calendar + meetings + rooms | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Files / OneDrive (upload, sharing, revoke) | ❌ | ✅ | ✅ | ✅ | ✅ | partial | ✅ |
+| SharePoint sites/lists/columns/items | ❌ | ✅ | ✅ | partial | ✅ | ❌ | ✅ |
+| Teams channels + messages | ❌ | ✅ | ✅ | ✅ | ✅ | read-only | ✅ |
+| Planner + To Do | ❌ | ✅ | ✅ | ❌ | ✅ | ❌ | ✅ |
+| OneNote notebooks/pages | ❌ | ✅ | ❌ | ✅ | ❌ | ❌ | ✅ |
+| Excel workbooks/ranges/tables | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Intune / device management | ❌ | partial | **deep** | ❌ | ❌ | ❌ | ✅ |
+| Identity governance (reviews/PIM) | partial | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Security alerts/incidents + audit logs | ❌ | partial | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Reports (M365 usage) | ❌ | partial | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Change notifications / delta | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Graph `$batch` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
+| **No SDK dependency** (`msgraph-sdk`/`azure-identity`) | n/a | n/a | ✅ | ✅ | n/a | ❌ | ✅ |
+| **Sovereign clouds** (US Gov, China, Germany) | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ |
+| **Hard read-only guard** (`MSGRAPH_READ_ONLY`) | n/a | ✅ | ❌ | ✅ | partial | ❌ | ✅ |
+| **Coverage drift CI** vs official Graph spec | n/a | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
+
+> Tool counts and capabilities are approximate, from the respective READMEs at
+> the time of writing — always verify against the source. The point is not that
+> "more is better", but that this project is the **deliberate Python,
+> self-hostable, write-capable, zero-SDK** option covering the practical day-to-day
+> Microsoft 365 surface an agent actually uses, with CI that keeps it honest
+> against the ever-growing Graph API.
+
+### Key differentiators
+
+- **Full coverage, one auth seam.** Authenticate once (six modes) and reach
+  mail, files, calendar, Teams, SharePoint, Planner, To Do, OneNote, Excel,
+  presence, security, audit and admin — instead of stitching together several
+  single-workload servers.
+- **No `msgraph-sdk`, no `azure-identity`.** A thin raw-HTTP client (`httpx`) +
+  `msal`. A radically smaller dependency tree and an inspectable wire path.
+- **Writes are possible but guarded.** Write tools call `require_write()`; set
+  `MSGRAPH_READ_ONLY=true` to forbid every one of them. Nothing mutates your
+  tenant by accident.
+- **Coverage drift CI.** A scheduled job compares the tool surface against the
+  official Microsoft Graph OpenAPI spec and files an issue when Microsoft ships
+  endpoints we don't cover yet — so the gap is visible instead of silent.
+
+---
+
+## What it provides
+
+A single stdio/HTTP MCP server exposing **219 tools** across 25 workloads:
+
+- **Mail** — list/search/get messages, send, reply, forward, drafts, folders,
+  move, rules, attachments, mailbox settings
+- **Files** — OneDrive + SharePoint drives: items, upload sessions, versions,
+  permissions, sharing links, revoke
+- **Calendar** — events, calendars, free/busy, meeting times, rooms, schedules
+- **Teams** — teams, channels, messages, replies, members, tabs
+- **Users & groups** — profiles, photos, licenses, memberships, members/owners
+- **Planner & To Do** — plans, buckets, tasks, assignments, checklist items
+- **OneNote** — notebooks, sections, section groups, pages
+- **Excel** — workbooks, worksheets, ranges, tables, sessions
+- **SharePoint** — sites, lists, columns, content types, list items
+- **Admin & security** — directory, device management, security
+  alerts/incidents, audit logs, reports, identity governance
+- **Meetings & presence** — online meetings, transcripts, attendance,
+  recordings, presence
+- **Search & integration** — unified Microsoft Search, `$batch`, change
+  notifications / delta
+
+—
+
+## Getting started
+
+You need an MCP-capable client (opencode, Claude Desktop, Cursor, etc.).
+
+### 1. Install
+
+**Option A — from PyPI (recommended)**
 
 ```bash
-pip install msgraph-mcp
+uvx msgraph-mcp-full
+# or
+pip install msgraph-mcp-full
 ```
 
-Or clone and run from source:
+**Option B — from GitHub (latest source)**
+
+```bash
+uvx --from "git+https://github.com/oliverhruby/msgraph-mcp.git" msgraph-mcp-full
+# or
+pip install "git+https://github.com/oliverhruby/msgraph-mcp.git"
+```
+
+**Option C — development from source**
 
 ```bash
 git clone https://github.com/oliverhruby/msgraph-mcp.git
 cd msgraph-mcp
-python -m venv .venv
-.venv/Scripts/activate        # Windows
-.venv/bin/activate            # macOS / Linux
-pip install -e .
+uv sync               # or: python -m venv .venv && .venv/bin/python -m pip install -e ".[dev]"
+uv run msgraph-mcp-full
 ```
 
-### Docker
+Run the checks before merging changes:
 
 ```bash
-docker build -t msgraph-mcp .
+uv run ruff check src scripts tests
+uv run pytest -q                       # offline unit suite (auth, client, 219-tool sweep)
+uv run pytest -m integration -q       # live read-only tests; skips without creds
+```
+
+**Option D — Docker**
+
+```bash
+docker pull ghcr.io/oliverhruby/msgraph-mcp:latest
+
 docker run --rm -i \
   -e MSGRAPH_AUTH_MODE=client_secret \
   -e MSGRAPH_CLIENT_ID=... -e MSGRAPH_CLIENT_SECRET=... \
   -e MSGRAPH_TENANT_ID=... \
-  msgraph-mcp
+  ghcr.io/oliverhruby/msgraph-mcp:latest
 ```
 
----
+> `pyproject.toml` pins `mcp<2` (the stable FastMCP v1 API). `mcp 2.x` renamed
+> `FastMCP` to `MCPServer` and changed the API surface; this server targets the
+> FastMCP v1 API for simplicity and stability.
 
-## Quick start
+### 2. Register an app in Microsoft Entra ID
 
-### 1. Register an app in Microsoft Entra ID (once)
-
-1. [.NET portal > App registrations](https://aka.ms/AppRegistrations) → New
-   registration.
+1. [App registrations](https://aka.ms/AppRegistrations) → New registration.
 2. Under **Authentication**, add a public client / redirect for the auth mode
    you plan to use (device-code and interactive need no redirect URI).
-3. Grant the API permissions your tools need (delegated and/or
-   application). `DEFAULT_DELEGATED_SCOPES` in `auth.py` lists sensible
-   defaults.
-4. Note the **Tenant ID**, **Client ID**, (and **Client Secret** / **cert** if
+3. Grant the API permissions your tools need (delegated and/or application).
+   `DEFAULT_DELEGATED_SCOPES` in `auth.py` lists sensible defaults.
+4. Note the **Tenant ID**, **Client ID** (and **Client Secret** / **cert** if
    using those modes).
 
-### 2. Authenticate
+### 3. Authenticate
+
+Configuration is entirely via environment variables.
 
 #### Interactive (default)
 
 ```bash
+export MSGRAPH_AUTH_MODE=interactive
 export MSGRAPH_CLIENT_ID=00000000-0000-0000-0000-000000000000
 export MSGRAPH_TENANT_ID=11111111-1111-1111-1111-111111111111
-msgraph-mcp
+msgraph-mcp-full
 ```
 
 A browser opens, you sign in, and a token cache is saved at
@@ -92,7 +242,7 @@ A browser opens, you sign in, and a token cache is saved at
 ```bash
 export MSGRAPH_AUTH_MODE=device_code
 export MSGRAPH_CLIENT_ID=...
-msgraph-mcp
+msgraph-mcp-full
 ```
 
 #### Client secret (app-only / daemon)
@@ -102,7 +252,7 @@ export MSGRAPH_AUTH_MODE=client_secret
 export MSGRAPH_CLIENT_ID=...
 export MSGRAPH_CLIENT_SECRET=...
 export MSGRAPH_TENANT_ID=...
-msgraph-mcp
+msgraph-mcp-full
 ```
 
 #### Certificate (app-only)
@@ -112,7 +262,7 @@ export MSGRAPH_AUTH_MODE=certificate
 export MSGRAPH_CLIENT_ID=...
 export MSGRAPH_CERT_PATH=/path/to/cert.pem
 export MSGRAPH_TENANT_ID=...
-msgraph-mcp
+msgraph-mcp-full
 ```
 
 #### On-behalf-of
@@ -120,7 +270,7 @@ msgraph-mcp
 ```bash
 export MSGRAPH_AUTH_MODE=obo
 export MSGRAPH_CLIENT_ID=... MSGRAPH_CLIENT_SECRET=... MSGRAPH_TENANT_ID=...
-msgraph-mcp
+msgraph-mcp-full
 ```
 
 #### Managed identity (Azure)
@@ -128,7 +278,7 @@ msgraph-mcp
 ```bash
 export MSGRAPH_AUTH_MODE=managed_identity     # or `managed_identity_user`
 export MSGRAPH_CLIENT_ID=...                  # the managed identity's client id
-msgraph-mcp
+msgraph-mcp-full
 ```
 
 #### Pre-existing token
@@ -136,28 +286,41 @@ msgraph-mcp
 ```bash
 export MSGRAPH_AUTH_MODE=pre_token
 export MSGRAPH_ACCESS_TOKEN=eyJ...
-msgraph-mcp
+msgraph-mcp-full
 ```
 
-### 3. Connect your MCP client
+### 4. Register with your MCP client
 
-Point your MCP client at `msgraph-mcp`. For example, in Claude Desktop or an
-agent runtime:
+**opencode** — add to `~/.config/opencode/opencode.json` (or `opencode.jsonc`):
 
-```json
+```jsonc
 {
-  "mcpServers": {
+  "mcp": {
     "msgraph": {
-      "command": "msgraph-mcp",
-      "args": []
+      "type": "local",
+      "enabled": true,
+      "command": ["uvx", "msgraph-mcp-full"],
+      "env": {
+        "MSGRAPH_AUTH_MODE": "client_secret",
+        "MSGRAPH_CLIENT_ID": "{env:MSGRAPH_CLIENT_ID}",
+        "MSGRAPH_CLIENT_SECRET": "{env:MSGRAPH_CLIENT_SECRET}",
+        "MSGRAPH_TENANT_ID": "{env:MSGRAPH_TENANT_ID}"
+      }
     }
   }
 }
 ```
 
-Over HTTP/SSE (see [Configuration](#configuration) for `MCP_TRANSPORT=streamable-http`):
+> Put credentials in your shell/environment (or a `.env`) and reference them
+> with `{env:VAR}`, or hardcode them under `env:` directly.
 
-```json
+**Claude Desktop / Cursor** — use `claude_desktop_config.json` / `.mcp.json`
+with a standard `mcpServers` entry pointing `command`/`args` at the venv python
+and `-m msgraph_mcp`, plus an `env` block.
+
+Over HTTP/SSE (`MCP_TRANSPORT=streamable-http`):
+
+```jsonc
 {
   "mcpServers": {
     "msgraph": {
@@ -168,11 +331,27 @@ Over HTTP/SSE (see [Configuration](#configuration) for `MCP_TRANSPORT=streamable
 }
 ```
 
+After editing client config, **restart the client** so the MCP server is loaded.
+
+---
+
+## Prompt examples
+
+| User prompt | Likely tool call(s) | Expected response |
+|---|---|---|
+| "Show my last 10 emails" | `list_messages top=10` | Recent messages (sender, subject, preview). |
+| "Draft a reply to Oliver accepting the meeting" | `get_message` → `reply_message` | Draft/sent confirmation (or draft body to review). |
+| "What's on my calendar this week?" | `list_events_in_range` | A short event list with times. |
+| "Create a 1-hour meeting tomorrow at 10:00" | `create_event` | Created event with id + link. |
+| "Upload `report.xlsx` to my OneDrive root" | `upload_file` | File metadata + sharing-ready link. |
+| "List questions asked in the #general channel today" | `list_channel_messages` | Channel messages with authors. |
+| "What tasks are due in my To Do this week?" | `list_tasks` | Tasks with due dates and states. |
+| "Any high-severity security alerts?" | `list_security_alerts` | Alerts with severity + status. |
+| "Who signed in from outside the US recently?" | `list_sign_in_logs` | Matching sign-in log entries. |
+
 ---
 
 ## Configuration
-
-Configuration is entirely via environment variables.
 
 | Variable | Default | Description |
 |---|---|---|
@@ -206,7 +385,8 @@ Tools are grouped by workload (each module under `src/msgraph_mcp/tools/`).
 | Workload | # Tools | Examples |
 |---|---|---|
 | `mail` | 19 | list/send/reply/forward messages, folders, drafts, rules, attachments, mailbox settings |
-| `files` | 19 | OneDrive/SharePoint items, upload sessions, versions, permissions, sharing links, revoke |
+| `files` | 19 | OneDrive items, upload sessions, versions, permissions, sharing links, revoke |
+| `sharepoint` | 17 | sites, lists, columns, content types, list items |
 | `calendar` | 14 | events, calendars, free/busy, findMeetingTimes, rooms, schedule |
 | `teams` | 13 | teams, channels, messages, replies, members, tabs |
 | `users` | 12 | profiles, photo, direct reports, licenses, transitive memberships |
@@ -232,52 +412,69 @@ Tools are grouped by workload (each module under `src/msgraph_mcp/tools/`).
 | **Total** | **219** | |
 
 Each tool is decorated with `@graph_tool(...)` carrying its HTTP method, Graph
-endpoint, and the delegated + application scopes required. Read the docstring
-of any tool for its exact behaviour; write tools call `require_write()` and
-fail fast in read-only mode.
+endpoint, and the delegated + application scopes required. Read any tool's
+docstring for exact behaviour; write tools call `require_write()` and fail fast
+in read-only mode.
 
 ---
 
-## How this differs from the official Microsoft MCP Server
+## Data & safety notes
 
-The [official Microsoft MCP Server for Enterprise] and `msgraph-mcp` are
-intentionally **divergent, complementary** tools:
-
-| | Official Microsoft MCP Server | **msgraph-mcp** |
-|---|---|---|
-| Hosting | Microsoft-hosted | **Self-hosted** (your machine / container) |
-| Auth | Your Graph connection | **Bring your own credentials** (6 modes) |
-| Scope | Read-only Entra **directory** | **Full Graph**: mail, files, calendar, Teams, SharePoint, Planner, Excel, admin… |
-| Tools | ~3 | **219** |
-| Write access | Read-only | Read + write (with read-only guard) |
-| Transport | stdio | stdio + HTTP/SSE |
-
-Use the official server when you only need read-only directory lookups with
-zero infra. Use `msgraph-mcp` when you want full Graph coverage, self-hosting,
-writes, and control over auth.
+- Most tools are **read-only**. The write tools (send/reply, create event,
+  upload/share/revoke file, create task, admin mutations, …) mutate real
+  Microsoft 365 state. Use them with care, or set `MSGRAPH_READ_ONLY=true` to
+  disable the entire write surface.
+- The server acts **as your credentials** — it can reach only what the
+  authenticated principal can reach. Delegated modes honour your user's
+  permissions; app-only modes use the application's granted permissions.
+- Sovereign-cloud endpoints differ; set `MSGRAPH_CLOUD` accordingly.
+- `MSGRAPH_API_VERSION=beta` exposes beta endpoints that may change without
+  notice — prefer `v1.0` unless you know you need a beta API.
 
 ---
 
-## Development
+## Contributing
 
-```bash
-pip install -e ".[dev]"
-ruff check src scripts
-python -m py_compile src/msgraph_mcp/__init__.py
-python -m msgraph_mcp      # then drive an MCP client; tools/list should show all 219
-```
+Contributor and maintainer guidance is in [CONTRIBUTING.md](CONTRIBUTING.md).
 
-Coverage drift check (needs network to fetch the Graph OpenAPI spec):
+- Contribution workflow and local setup
+- Architecture and implementation details
+- Release process (PyPI, GitHub Releases, GHCR)
+- CI quality gates and upstream coverage drift checks
 
-```bash
-python scripts/check_graph_api_coverage.py
-```
+---
 
-See [AGENTS.md](AGENTS.md) for conventions and [CONTRIBUTING.md](CONTRIBUTING.md)
-for contributing.
+## Limitations
+
+- **Token lifetime = server lifetime.** The auth session lives for the lifetime
+  of the MCP server process; restarting the client means signing in again (the
+  on-disk cache in `~/.msgraph-mcp/` helps for interactive/device flows).
+- **Beta surface is opt-in.** Only `v1.0` is covered by the coverage-drift
+  baseline; beta endpoints are registered but not independently monitored.
+- **Coverage is broad, not exhaustive.** The Graph API has ~18,000 v1.0
+  operations; this server wraps the practical day-to-day surface (219 tools) and
+  tracks the gap via the coverage-drift canary rather than claiming 100%.
+- **Intune & admin depth.** Device management and Intune are covered at a useful
+  level but not as deep as a dedicated Intune server (e.g. DustHoff's).
+- **No Graph Explorer-grade generality.** For an arbitrary, not-yet-covered
+  endpoint, prefer the official server, GraphMind-style indexing, or a raw
+  `$batch` call.
+
+---
+
+## Support
+
+If you like this project and want to support or request a feature, send me a
+beer, it keeps my mind relaxed and ideas will come :-)
+
+[![Support via PayPal](https://www.paypalobjects.com/en_US/i/btn/btn_donateCC_LG.gif)](https://www.paypal.me/oliverhruby/)
 
 ---
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE) © Oliver Hrubý
+
+This project is **not affiliated with or endorsed by** Microsoft or any of the
+other MCP servers referenced above. Microsoft Graph and Microsoft 365 are
+trademarks of Microsoft Corporation.

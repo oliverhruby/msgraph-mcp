@@ -1,0 +1,43 @@
+name: Integration Tests
+
+# Live read-only tests against the user's test tenant.
+#
+# NOT a required check and NOT a quality gate yet. This job runs on manual
+# dispatch and after merges to main, but is inert until:
+#   1. repo variable INTEGRATION_ENABLED == "true"
+#   2. repo secrets MSGRAPH_TENANT_ID / MSGRAPH_CLIENT_ID / MSGRAPH_CLIENT_SECRET
+#      are configured (optional: repo variable MSGRAPH_TEST_USER_ID to pin the
+#      principal used by user-scoped reads).
+# The app used must be consented for the read scopes exercised in tests/integration
+# (User.Read.All, Group.Read.All, Presence.Read.All, Sites.Read.All, ...).
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    if: vars.INTEGRATION_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install package with dev/test deps
+        run: python -m pip install --upgrade pip && python -m pip install ".[dev]"
+
+      - name: Run live integration tests (read-only)
+        run: python -m pytest -m integration -q
+        env:
+          MSGRAPH_AUTH_MODE: client_secret
+          MSGRAPH_TENANT_ID: ${{ secrets.MSGRAPH_TENANT_ID }}
+          MSGRAPH_CLIENT_ID: ${{ secrets.MSGRAPH_CLIENT_ID }}
+          MSGRAPH_CLIENT_SECRET: ${{ secrets.MSGRAPH_CLIENT_SECRET }}
+          MSGRAPH_TEST_USER_ID: ${{ vars.MSGRAPH_TEST_USER_ID }}
