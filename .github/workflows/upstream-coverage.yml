@@ -67,7 +67,7 @@ jobs:
 
       - name: File issue for uncovered endpoints
         if: steps.extract.outputs.uncovered_count
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const out = require('child_process').execSync('cat /tmp/coverage_out.txt').toString();
